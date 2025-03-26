@@ -1,0 +1,24 @@
+# Dependências básicas
+streamlit>=1.22.0
+pandas>=1.5.0
+numpy>=1.22.0
+
+# Conexão com banco de dados
+psycopg2-binary>=2.9.5
+sqlalchemy>=2.0.0
+
+# Suporte para diferentes formatos de arquivo
+openpyxl>=3.1.0
+xlrd>=2.0.1
+
+# Visualização de dados
+matplotlib>=3.6.0
+seaborn>=0.12.0
+plotly>=5.13.0
+
+# Utilidades
+python-dateutil>=2.8.2
+pytz>=2022.7
+
+
+anthropic==0.19.1
