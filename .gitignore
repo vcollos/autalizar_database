@@ -4,5 +4,6 @@ __pycache__
 *.db
 *.sqlite
 .env
-/venv
-/node_modules
+.venv
+node_modules
+arquivos

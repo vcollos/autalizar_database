@@ -281,11 +281,54 @@ def process_and_import_files(files, table_name, sep, encoding, column_types, if_
                     mode = 'append'
                     log.append(f"Adicionando dados à tabela '{table_name}'.")
                 
-                # Verificar se os dados já existem na tabela
-                existing_data = pd.read_sql(f"SELECT CD_OPERADORA FROM {table_name}", st.session_state.conn)
-                
-                # Filtrar o chunk para inserir apenas os registros que não existem na tabela
-                new_data = chunk[~chunk['CD_OPERADORA'].isin(existing_data['CD_OPERADORA'])]
+                # Verificar se a coluna CD_OPERADORA existe na tabela e no chunk
+                try:
+                    # Verificar quais colunas existem no chunk (independente de maiúsculas/minúsculas)
+                    chunk_columns_upper = [col.upper() for col in chunk.columns]
+                    
+                    # Verificar se alguma variação de CD_OPERADORA existe no chunk
+                    cd_operadora_exists_in_chunk = 'CD_OPERADORA' in chunk_columns_upper
+                    
+                    if cd_operadora_exists_in_chunk:
+                        # Encontrar o nome exato da coluna no chunk
+                        chunk_column = next(col for col in chunk.columns if col.upper() == 'CD_OPERADORA')
+                        
+                        # Verificar se a coluna existe na tabela (tentando com minúsculas primeiro)
+                        try:
+                            existing_data = pd.read_sql(f"SELECT cd_operadora FROM {table_name}", st.session_state.conn)
+                            column_name = "cd_operadora"
+                        except Exception as e:
+                            try:
+                                # Tentar com maiúsculas
+                                existing_data = pd.read_sql(f'SELECT "CD_OPERADORA" FROM {table_name}', st.session_state.conn)
+                                column_name = "CD_OPERADORA"
+                            except Exception as e2:
+                                # Se ambas as tentativas falharem, assumir que a tabela está vazia ou não tem essa coluna
+                                log.append(f"Aviso: Não foi possível verificar dados existentes: {e2}")
+                                existing_data = pd.DataFrame(columns=['cd_operadora'])
+                                column_name = None
+                        
+                        # Filtrar o chunk para inserir apenas os registros que não existem na tabela
+                        if column_name:
+                            # Normalizar o nome da coluna no DataFrame existente
+                            if column_name.lower() != 'cd_operadora':
+                                existing_data.rename(columns={column_name: 'cd_operadora'}, inplace=True)
+                            
+                            # Filtrar dados
+                            new_data = chunk[~chunk[chunk_column].isin(existing_data['cd_operadora'])]
+                        else:
+                            new_data = chunk
+                    else:
+                        # Se não encontrou a coluna CD_OPERADORA no chunk, usar todos os dados
+                        log.append(f"Aviso: Coluna 'CD_OPERADORA' não encontrada no arquivo. Importando todos os registros.")
+                        new_data = chunk
+                except Exception as col_error:
+                    # Em caso de erro na verificação de colunas, registrar e continuar com todos os dados
+                    log.append(f"Aviso: Erro ao verificar colunas: {col_error}. Importando todos os registros.")
+                    new_data = chunk
+                else:
+                    # Se não encontrou a coluna ou ela não existe no chunk, usar todos os dados
+                    new_data = chunk
                 
                 try:
                     new_data.to_sql(table_name, st.session_state.engine, if_exists=mode, index=False)
@@ -396,54 +439,6 @@ with st.sidebar:
                 "DT_VINCULO_OPERADORA_INICIO": "date",
                 "DT_VINCULO_OPERADORA_FIM": "date",
                 "DT_ATUALIZACAO": "date"
-            },
-            "Prestadores Hospitalares": {
-                "CD_OPERADORA": "text",
-                "NM_FANTASIA_PRESTADOR": "text",
-                "NM_RAZAO_SOCIAL": "text",
-                "NU_CNPJ": "text",
-                "TP_IDENTIFICADOR": "text",
-                "TP_CONTRATACAO": "text",
-                "TP_CLASSIFICACAO_PRESTADOR": "text",
-                "QT_LEITOS_TOTAL": "integer",
-                "QT_LEITOS_SUS": "integer",
-                "QT_LEITOS_NAO_SUS": "integer",
-                "DT_VINCULO_OPERADORA_INICIO": "date",
-                "DT_VINCULO_OPERADORA_FIM": "date",
-                "DT_ATUALIZACAO": "date"
-            },
-            "Cidades": {
-                "CD_MUNICIPIO": "text",
-                "NM_MUNICIPIO": "text",
-                "SG_UF": "text",
-                "NO_UF": "text",
-                "NO_REGIAO": "text"
-            },
-            "Operadoras": {
-                "CD_OPERADORA": "text",
-                "NM_FANTASIA": "text",
-                "NM_RAZAO_SOCIAL": "text",
-                "NU_CNPJ": "text",
-                "TP_CLASSIFICACAO": "text",
-                "TP_NATUREZA_JUR": "text",
-                "SG_UF": "text",
-                "CD_MUNICIPIO": "text",
-                "NM_MUNICIPIO": "text",
-                "DT_REGISTRO_ANS": "date",
-                "DT_CANCELAMENTO": "date",
-                "DT_ATUALIZACAO": "date"
-            },
-            "Beneficiários": {
-                "CD_OPERADORA": "text",
-                "NM_OPERADORA": "text",
-                "CD_CONTA_CONTRATANTE": "text",
-                "TP_CONTA_CONTRATANTE": "text",
-                "CD_MUNICIPIO": "text",
-                "UF_BENEFICIARIO": "text",
-                "FAIXA_ETARIA": "text",
-                "QT_BENEFICIARIOS": "integer",
-                "COMPETENCIA": "text",
-                "DT_ATUALIZACAO": "date"
             }
         }
         
@@ -488,7 +483,7 @@ st.markdown("<h2 class='sub-header'>Configuração de Importação</h2>", unsafe
 # Formulário principal
 with st.form("importacao_form"):
     # Caminho do diretório
-    dir_path = st.text_input("Diretório dos Arquivos", value="/Volumes/M1_SSD/DEV/ANS/Arquivos/")
+    dir_path = st.text_input("Diretório dos Arquivos", value="./arquivos/")
     
     # Padrão de arquivo
     file_pattern = st.text_input("Padrão de Arquivo", value="*.csv", 
